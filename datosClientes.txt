@@ -1,5 +1,3 @@
-Andres               
-Reyes                
-Rojas                
-18422298-1   
-564766662899
+Andres              Reyes               Rojas               18422298-1  564766662899
+Maria               Elena               Gonzalez            15678945-2  564766662900
+Carlos              Antonio             Silva               18765432-3  564766662901
