@@ -1,0 +1,593 @@
+IDENTIFICATION DIVISION.
+PROGRAM-ID. CPC_COBOL.
+AUTHOR. "Andres Reyes Rojas".
+
+ENVIRONMENT DIVISION.
+INPUT-OUTPUT SECTION.
+FILE-CONTROL.
+    SELECT DATOS-CLIENTES ASSIGN TO 'datosClientes.txt'
+        ORGANIZATION IS LINE SEQUENTIAL.
+    SELECT DATOS-CREDITOS ASSIGN TO 'datosCreditos.txt'
+        ORGANIZATION IS LINE SEQUENTIAL.
+    SELECT DATOS-TASA ASSIGN TO 'datosTasa.txt'
+        ORGANIZATION IS LINE SEQUENTIAL.
+    SELECT SALIDA ASSIGN TO 'resumenDelCredito.txt'
+        ORGANIZATION IS LINE SEQUENTIAL.
+
+DATA DIVISION.
+FILE SECTION.
+FD DATOS-CLIENTES.
+01 REG-CLIENTE           PIC X(100).
+
+FD DATOS-CREDITOS.
+01 REG-CREDITO           PIC X(100).
+
+FD DATOS-TASA.
+01 REG-TASA              PIC X(100).
+
+FD SALIDA.
+01 REG-SALIDA            PIC X(200).
+
+WORKING-STORAGE SECTION.
+01 WS-EOF-SWITCHES.
+   05 WS-EOF-CLIENTE       PIC X VALUE 'N'.
+   05 WS-EOF-CREDITO       PIC X VALUE 'N'.
+   05 WS-EOF-TASA          PIC X VALUE 'N'.
+
+01 WS-DATOS-CLIENTE.
+   05 WS-NOMBRE            PIC X(20).
+   05 WS-APELLIDO-PAT      PIC X(20).
+   05 WS-APELLIDO-MAT      PIC X(20).
+   05 WS-RUT               PIC X(12).
+   05 WS-NUMERO-CREDITO    PIC X(12).
+
+01 WS-DATOS-CREDITO.
+   05 WS-CRE-NUMERO        PIC X(12).
+   05 WS-MONTO-SOLICITADO  PIC 9(12)V99.
+   05 WS-FECHA-OTORGA      PIC X(10).
+   05 WS-PERIODICIDAD      PIC 99.
+   05 WS-CANT-CUOTAS       PIC 99.
+
+01 WS-DATOS-TASA.
+   05 WS-TAS-NUMERO        PIC X(12).
+   05 WS-TASA-ANUAL        PIC 99V99.
+   05 WS-TASA-MENSUAL      PIC 9V99.
+
+01 WS-CAMPOS-FECHA.
+   05 WS-DIA-OTORGA        PIC 99.
+   05 WS-MES-OTORGA        PIC 99.
+   05 WS-ANIO-OTORGA       PIC 9(4).
+   05 WS-FECHA-ACTUAL.
+      10 WS-DIA-ACT        PIC 99.
+      10 WS-MES-ACT        PIC 99.
+      10 WS-ANIO-ACT       PIC 9(4).
+
+01 WS-CALCULOS.
+   05 WS-VALOR-CUOTA       PIC 9(12)V9(2).
+   05 WS-SALDO-INICIAL     PIC 9(12)V9(2).
+   05 WS-SALDO-FINAL       PIC 9(12)V9(2).
+   05 WS-CAPITAL-AMORT     PIC 9(12)V9(2).
+   05 WS-INTERES-CUOTA     PIC 9(12)V9(2).
+   05 WS-TEMP1             PIC 9(12)V9(9).
+   05 WS-TEMP2             PIC 9(12)V9(9).
+   05 WS-TASA-MENSUAL-DEC  PIC 9V9(9).
+   05 WS-TASA-ANUAL-DEC    PIC 9V9(9).
+   05 WS-POTENCIA          PIC 9(12)V9(9).
+   05 WS-CUOTA-ACTUAL      PIC 99.
+   05 WS-FECHA-PAGO.
+      10 WS-FP-DIA         PIC 99.
+      10 WS-FP-MES         PIC 99.
+      10 WS-FP-ANIO        PIC 9(4).
+   05 WS-TOTAL-INTERESES   PIC 9(12)V9(2).
+   05 WS-COSTO-TOTAL       PIC 9(12)V9(2).
+   05 WS-DECIMAL-PART      PIC 99.
+   05 WS-ENTERO-PART       PIC 9(12).
+   05 WS-VALOR-REDONDEAR   PIC 9(12)V9(2).
+   05 WS-AJUSTE-ULTIMA     PIC 9(12)V9(2).
+   05 WS-SALDO-TEMP        PIC 9(12)V9(2).
+   05 WS-POTENCIA-CMF      PIC 9(9)V9(9).
+
+01 WS-DISPLAY-VARS.
+   05 WS-DISPLAY-MONTO     PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-SALDO     PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-CUOTA     PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-CAPITAL   PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-INTERES   PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-TOTAL-INT PIC $$,$$$,$$$,$$9.
+   05 WS-DISPLAY-COSTO-TOT PIC $$,$$$,$$$,$$9.
+   05 WS-FECHA-PAGO-FORM   PIC X(10).
+   05 WS-FECHA-OTORGA-FORM PIC X(10).
+
+01 WS-LINEA-SALIDA.
+   05 WS-LS-CUOTA          PIC Z9.
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-FECHA          PIC X(10).
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-SALDO-INICIAL  PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-VALOR-CUOTA    PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-CAPITAL        PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-INTERES        PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(3) VALUE " | ".
+   05 WS-LS-SALDO-FINAL    PIC $$,$$$,$$$,$$9.
+
+01 WS-CABECERA-CLIENTE.
+   05 FILLER               PIC X(5)  VALUE "RUT: ".
+   05 WS-CC-RUT            PIC X(12).
+   05 FILLER               PIC X(5)  VALUE " | ".
+   05 FILLER               PIC X(16) VALUE "N° CREDITO: ".
+   05 WS-CC-NUM-CREDITO    PIC X(12).
+   05 FILLER               PIC X(5)  VALUE " | ".
+   05 FILLER               PIC X(22) VALUE "MONTO SOLICITADO CLP:".
+   05 WS-IC-MONTO          PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(11) VALUE " | CUOTAS:".
+   05 WS-IC-CUOTAS         PIC Z9.
+
+01 WS-DIAS-POR-MES.
+   05 WS-DIAS-MES OCCURS 12 TIMES 
+                     INDEXED BY WS-I-MES.
+      10 WS-DIAS           PIC 99.
+
+01 WS-CONTROL-REGISTROS.
+   05 WS-CLIENTES-ENCONTRADOS PIC 9(3) VALUE 0.
+   05 WS-CREDITOS-ENCONTRADOS PIC 9(3) VALUE 0.
+   05 WS-TASAS-ENCONTRADAS   PIC 9(3) VALUE 0.
+
+01 WS-RESUMEN-LINEA.
+   05 FILLER               PIC X(28) 
+                            VALUE "Costo Total del Préstamo: ".
+   05 WS-RES-COSTO-TOTAL   PIC $$,$$$,$$$,$$9.
+   05 FILLER               PIC X(28) 
+                            VALUE " e Importe Total de Intereses: ".
+   05 WS-RES-TOTAL-INTERES PIC $$,$$$,$$$,$$9.
+
+PROCEDURE DIVISION.
+MAIN-PROGRAM.
+    PERFORM 1000-INICIALIZAR
+    PERFORM 2000-PROCESAR-ARCHIVOS
+    PERFORM 4000-FINALIZAR
+    STOP RUN.
+
+1000-INICIALIZAR.
+    OPEN INPUT DATOS-CLIENTES
+    OPEN INPUT DATOS-CREDITOS
+    OPEN INPUT DATOS-TASA
+    OPEN OUTPUT SALIDA.
+    
+    *> Inicializar días por mes
+    MOVE 31 TO WS-DIAS(1)   *> Enero
+    MOVE 28 TO WS-DIAS(2)   *> Febrero
+    MOVE 31 TO WS-DIAS(3)   *> Marzo
+    MOVE 30 TO WS-DIAS(4)   *> Abril
+    MOVE 31 TO WS-DIAS(5)   *> Mayo
+    MOVE 30 TO WS-DIAS(6)   *> Junio
+    MOVE 31 TO WS-DIAS(7)   *> Julio
+    MOVE 31 TO WS-DIAS(8)   *> Agosto
+    MOVE 30 TO WS-DIAS(9)   *> Septiembre
+    MOVE 31 TO WS-DIAS(10)  *> Octubre
+    MOVE 30 TO WS-DIAS(11)  *> Noviembre
+    MOVE 31 TO WS-DIAS(12). *> Diciembre
+
+2000-PROCESAR-ARCHIVOS.
+    PERFORM 2100-LEER-CLIENTES
+    PERFORM UNTIL WS-EOF-CLIENTE = 'Y'
+        PERFORM 2200-LEER-CREDITOS
+        PERFORM UNTIL WS-EOF-CREDITO = 'Y'
+            PERFORM 2300-LEER-TASAS
+            PERFORM UNTIL WS-EOF-TASA = 'Y'
+                *> Validar que los números de crédito coincidan
+                IF WS-NUMERO-CREDITO = WS-CRE-NUMERO AND
+                   WS-NUMERO-CREDITO = WS-TAS-NUMERO
+                    PERFORM 2500-PREPARAR-FECHAS
+                    PERFORM 3000-GENERAR-CUADRO-PAGO
+                END-IF
+                PERFORM 2300-LEER-TASAS
+            END-PERFORM
+            CLOSE DATOS-TASA
+            OPEN INPUT DATOS-TASA
+            MOVE 'N' TO WS-EOF-TASA
+            PERFORM 2200-LEER-CREDITOS
+        END-PERFORM
+        CLOSE DATOS-CREDITOS
+        OPEN INPUT DATOS-CREDITOS
+        MOVE 'N' TO WS-EOF-CREDITO
+        PERFORM 2100-LEER-CLIENTES
+    END-PERFORM.
+
+2100-LEER-CLIENTES.
+    READ DATOS-CLIENTES
+        AT END 
+            MOVE 'Y' TO WS-EOF-CLIENTE
+        NOT AT END
+            *> Procesar registro horizontal
+            UNSTRING REG-CLIENTE 
+                DELIMITED BY ALL SPACES
+                INTO WS-NOMBRE
+                     WS-APELLIDO-PAT
+                     WS-APELLIDO-MAT
+                     WS-RUT
+                     WS-NUMERO-CREDITO
+            END-UNSTRING
+            ADD 1 TO WS-CLIENTES-ENCONTRADOS
+    END-READ.
+
+2200-LEER-CREDITOS.
+    READ DATOS-CREDITOS
+        AT END 
+            MOVE 'Y' TO WS-EOF-CREDITO
+        NOT AT END
+            *> Procesar registro horizontal
+            UNSTRING REG-CREDITO 
+                DELIMITED BY ALL SPACES
+                INTO WS-CRE-NUMERO
+                     WS-MONTO-SOLICITADO
+                     WS-FECHA-OTORGA
+                     WS-PERIODICIDAD
+                     WS-CANT-CUOTAS
+            END-UNSTRING
+            ADD 1 TO WS-CREDITOS-ENCONTRADOS
+    END-READ.
+
+2300-LEER-TASAS.
+    READ DATOS-TASA
+        AT END 
+            MOVE 'Y' TO WS-EOF-TASA
+        NOT AT END
+            *> Procesar registro horizontal
+            UNSTRING REG-TASA 
+                DELIMITED BY ALL SPACES
+                INTO WS-TAS-NUMERO
+                     WS-TASA-ANUAL
+                     WS-TASA-MENSUAL
+            END-UNSTRING
+            ADD 1 TO WS-TASAS-ENCONTRADAS
+    END-READ.
+
+2500-PREPARAR-FECHAS.
+    *> Convertir fecha de otorgamiento a campos numéricos
+    UNSTRING WS-FECHA-OTORGA
+        DELIMITED BY "-"
+        INTO WS-DIA-OTORGA
+             WS-MES-OTORGA
+             WS-ANIO-OTORGA
+    END-UNSTRING
+    
+    *> Preparar fecha actual para primera cuota
+    MOVE WS-DIA-OTORGA TO WS-DIA-ACT
+    MOVE WS-MES-OTORGA TO WS-MES-ACT
+    MOVE WS-ANIO-OTORGA TO WS-ANIO-ACT.
+
+3000-GENERAR-CUADRO-PAGO.
+    PERFORM 3100-CALCULAR-VALOR-CUOTA-CMF
+    PERFORM 3200-PREPARAR-CUADRO.
+
+3100-CALCULAR-VALOR-CUOTA-CMF.
+    *> CÁLCULO SEGÚN CMF - Con redondeos intermedios exactos
+    COMPUTE WS-TASA-MENSUAL-DEC = WS-TASA-MENSUAL / 100
+    
+    *> Paso 1: Calcular (1 + i)^n con redondeo a 6 decimales
+    COMPUTE WS-POTENCIA-CMF = 
+        (1 + WS-TASA-MENSUAL-DEC) ** WS-CANT-CUOTAS
+    COMPUTE WS-POTENCIA-CMF ROUNDED = 
+        (WS-POTENCIA-CMF * 1000000) / 1000000
+
+    *> Paso 2: Calcular i × (1 + i)^n con redondeo a 6 decimales  
+    COMPUTE WS-TEMP1 = WS-TASA-MENSUAL-DEC * WS-POTENCIA-CMF
+    COMPUTE WS-TEMP1 ROUNDED = 
+        (WS-TEMP1 * 1000000) / 1000000
+
+    *> Paso 3: Calcular P × [i × (1 + i)^n] con redondeo a 2 decimales
+    COMPUTE WS-TEMP1 = WS-MONTO-SOLICITADO * WS-TEMP1
+    COMPUTE WS-TEMP1 ROUNDED = 
+        (WS-TEMP1 * 100) / 100
+
+    *> Paso 4: Calcular [(1 + i)^n - 1] con redondeo a 6 decimales
+    COMPUTE WS-TEMP2 = WS-POTENCIA-CMF - 1
+    COMPUTE WS-TEMP2 ROUNDED = 
+        (WS-TEMP2 * 1000000) / 1000000
+
+    *> Paso 5: Calcular cuota final con redondeo a 0 decimales
+    IF WS-TEMP2 NOT = 0
+        COMPUTE WS-VALOR-CUOTA = WS-TEMP1 / WS-TEMP2
+        *> Redondeo comercial CMF (>= 0.5 suma 1, < 0.5 trunca)
+        COMPUTE WS-ENTERO-PART = FUNCTION INTEGER(WS-VALOR-CUOTA)
+        COMPUTE WS-DECIMAL-PART = 
+            FUNCTION MOD(WS-VALOR-CUOTA * 100, 100)
+        
+        IF WS-DECIMAL-PART >= 50
+            COMPUTE WS-VALOR-CUOTA = WS-ENTERO-PART + 1
+        ELSE
+            COMPUTE WS-VALOR-CUOTA = WS-ENTERO-PART
+        END-IF
+    ELSE
+        MOVE WS-MONTO-SOLICITADO TO WS-VALOR-CUOTA
+    END-IF.
+
+3200-PREPARAR-CUADRO.
+    MOVE WS-MONTO-SOLICITADO TO WS-SALDO-INICIAL
+    MOVE 0 TO WS-TOTAL-INTERESES
+    MOVE 0 TO WS-AJUSTE-ULTIMA
+
+    *> AGREGAR LÍNEAS EN BLANCO ANTES DE CADA NUEVO CUADRO
+    MOVE " " TO REG-SALIDA
+    WRITE REG-SALIDA
+    WRITE REG-SALIDA
+
+    *> ESCRIBIR ENCABEZADOS EN ARCHIVO
+    MOVE "CUADRO DE PAGOS" TO REG-SALIDA
+    WRITE REG-SALIDA
+    MOVE " " TO REG-SALIDA
+    WRITE REG-SALIDA
+    
+    *> Mostrar nombre completo del cliente
+    STRING "NOMBRE: " FUNCTION TRIM(WS-NOMBRE) 
+           " " FUNCTION TRIM(WS-APELLIDO-PAT)
+           " " FUNCTION TRIM(WS-APELLIDO-MAT)
+      INTO REG-SALIDA
+    WRITE REG-SALIDA
+    
+    MOVE WS-RUT TO WS-CC-RUT
+    MOVE WS-NUMERO-CREDITO TO WS-CC-NUM-CREDITO
+    *> AGREGAR INFORMACIÓN DEL MONTO Y CUOTAS A LA CABECERA
+    MOVE WS-MONTO-SOLICITADO TO WS-IC-MONTO
+    MOVE WS-CANT-CUOTAS TO WS-IC-CUOTAS
+    MOVE WS-CABECERA-CLIENTE TO REG-SALIDA
+    WRITE REG-SALIDA
+    
+    MOVE "|Cuota | Fecha       | Saldo         | Valor Cuota | Amort-Capital | Interes    | Saldo Final      |" 
+      TO REG-SALIDA
+    WRITE REG-SALIDA
+    MOVE "|------|-------------|---------------|-------------|---------------|------------|------------------|" 
+      TO REG-SALIDA
+    WRITE REG-SALIDA
+
+    *> AGREGAR SEPARACIÓN EN PANTALLA TAMBIÉN
+    DISPLAY " "
+    DISPLAY " "
+    DISPLAY "CUADRO DE PAGOS"
+    DISPLAY " "
+    DISPLAY "NOMBRE: " FUNCTION TRIM(WS-NOMBRE) 
+            " " FUNCTION TRIM(WS-APELLIDO-PAT)
+            " " FUNCTION TRIM(WS-APELLIDO-MAT)
+    *> AGREGAR INFORMACIÓN DEL MONTO Y CUOTAS EN PANTALLA TAMBIÉN
+    MOVE WS-MONTO-SOLICITADO TO WS-IC-MONTO
+    MOVE WS-CANT-CUOTAS TO WS-IC-CUOTAS
+    DISPLAY WS-CABECERA-CLIENTE
+    DISPLAY " "
+    DISPLAY "|Cuota | Fecha       | Saldo         | Valor Cuota | Amort-Capital | Interes    | Saldo Final      |"
+    DISPLAY "|------|-------------|---------------|-------------|---------------|------------|------------------|"
+
+    *> MOSTRAR CUOTA 00 - VALOR ORIGINAL
+    PERFORM 3230-MOSTRAR-CUOTA-00
+
+    PERFORM VARYING WS-CUOTA-ACTUAL FROM 1 BY 1
+            UNTIL WS-CUOTA-ACTUAL > WS-CANT-CUOTAS
+        PERFORM 3250-CALCULAR-FECHA-PAGO
+        PERFORM 3210-CALCULAR-CUOTA-CMF
+        PERFORM 3220-MOSTRAR-CUOTA
+    END-PERFORM
+
+    *> Mostrar línea separadora final
+    MOVE "|------|-------------|---------------|-------------|---------------|------------|------------------|" 
+      TO REG-SALIDA
+    WRITE REG-SALIDA
+    DISPLAY "|------|-------------|---------------|-------------|---------------|------------|------------------|"
+
+    PERFORM 3240-MOSTRAR-RESUMEN.
+
+3210-CALCULAR-CUOTA-CMF.
+    *> Calcular interés mensual según método CMF (redondeo a 0 decimales)
+    COMPUTE WS-INTERES-CUOTA = 
+        WS-SALDO-INICIAL * WS-TASA-MENSUAL-DEC
+    
+    *> Redondeo comercial para interés
+    COMPUTE WS-ENTERO-PART = FUNCTION INTEGER(WS-INTERES-CUOTA)
+    COMPUTE WS-DECIMAL-PART = 
+        FUNCTION MOD(WS-INTERES-CUOTA * 100, 100)
+    IF WS-DECIMAL-PART >= 50
+        COMPUTE WS-INTERES-CUOTA = WS-ENTERO-PART + 1
+    ELSE
+        COMPUTE WS-INTERES-CUOTA = WS-ENTERO-PART
+    END-IF
+
+    *> Para cuotas normales
+    COMPUTE WS-CAPITAL-AMORT = 
+        WS-VALOR-CUOTA - WS-INTERES-CUOTA
+    
+    COMPUTE WS-SALDO-FINAL = 
+        WS-SALDO-INICIAL - WS-CAPITAL-AMORT
+
+    *> Ajuste para última cuota - método CMF
+    IF WS-CUOTA-ACTUAL = WS-CANT-CUOTAS
+        COMPUTE WS-CAPITAL-AMORT = WS-SALDO-INICIAL
+        COMPUTE WS-INTERES-CUOTA = 
+            WS-SALDO-INICIAL * WS-TASA-MENSUAL-DEC
+        *> Redondeo comercial para interés última cuota
+        COMPUTE WS-ENTERO-PART = FUNCTION INTEGER(WS-INTERES-CUOTA)
+        COMPUTE WS-DECIMAL-PART = 
+            FUNCTION MOD(WS-INTERES-CUOTA * 100, 100)
+        IF WS-DECIMAL-PART >= 50
+            COMPUTE WS-INTERES-CUOTA = WS-ENTERO-PART + 1
+        ELSE
+            COMPUTE WS-INTERES-CUOTA = WS-ENTERO-PART
+        END-IF
+        COMPUTE WS-VALOR-CUOTA = 
+            WS-CAPITAL-AMORT + WS-INTERES-CUOTA
+        COMPUTE WS-SALDO-FINAL = 0
+    END-IF
+
+    *> Verificar que no quede saldo negativo
+    IF WS-SALDO-FINAL < 0
+        MOVE 0 TO WS-SALDO-FINAL
+    END-IF
+
+    COMPUTE WS-TOTAL-INTERESES = 
+        WS-TOTAL-INTERESES + WS-INTERES-CUOTA.
+
+3220-MOSTRAR-CUOTA.
+    *> Aplicar redondeo comercial CMF (sin decimales en display)
+    MOVE WS-VALOR-CUOTA TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-VALOR-CUOTA
+
+    MOVE WS-CAPITAL-AMORT TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-CAPITAL-AMORT
+
+    MOVE WS-INTERES-CUOTA TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-INTERES-CUOTA
+
+    MOVE WS-SALDO-FINAL TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-SALDO-FINAL
+
+    *> Formatear fecha para display
+    STRING WS-FP-DIA "-" WS-FP-MES "-" WS-FP-ANIO
+      INTO WS-FECHA-PAGO-FORM
+    END-STRING
+
+    *> PREPARAR LINEA PARA ARCHIVO
+    MOVE WS-CUOTA-ACTUAL TO WS-LS-CUOTA
+    MOVE WS-FECHA-PAGO-FORM TO WS-LS-FECHA
+    MOVE WS-SALDO-INICIAL TO WS-LS-SALDO-INICIAL
+    MOVE WS-VALOR-CUOTA TO WS-LS-VALOR-CUOTA
+    MOVE WS-CAPITAL-AMORT TO WS-LS-CAPITAL
+    MOVE WS-INTERES-CUOTA TO WS-LS-INTERES
+    MOVE WS-SALDO-FINAL TO WS-LS-SALDO-FINAL
+    
+    MOVE WS-LINEA-SALIDA TO REG-SALIDA
+    WRITE REG-SALIDA
+
+    DISPLAY "|" WS-LS-CUOTA " | " 
+            WS-LS-FECHA " | "
+            WS-LS-SALDO-INICIAL " | "
+            WS-LS-VALOR-CUOTA " | "
+            WS-LS-CAPITAL " | "
+            WS-LS-INTERES " | "
+            WS-LS-SALDO-FINAL " |"
+
+    MOVE WS-SALDO-FINAL TO WS-SALDO-INICIAL.
+
+3230-MOSTRAR-CUOTA-00.
+    *> Formatear fecha original
+    STRING WS-DIA-OTORGA "-" WS-MES-OTORGA "-" WS-ANIO-OTORGA
+      INTO WS-FECHA-OTORGA-FORM
+    END-STRING
+
+    *> ESCRIBIR CUOTA 00 EN ARCHIVO
+    MOVE 0 TO WS-LS-CUOTA
+    MOVE WS-FECHA-OTORGA-FORM TO WS-LS-FECHA
+    MOVE WS-MONTO-SOLICITADO TO WS-LS-SALDO-INICIAL
+    MOVE 0 TO WS-LS-VALOR-CUOTA
+    MOVE 0 TO WS-LS-CAPITAL
+    MOVE 0 TO WS-LS-INTERES
+    MOVE WS-MONTO-SOLICITADO TO WS-LS-SALDO-FINAL
+    
+    MOVE WS-LINEA-SALIDA TO REG-SALIDA
+    WRITE REG-SALIDA
+
+    DISPLAY "|00 | " 
+            WS-FECHA-OTORGA-FORM " | "
+            WS-LS-SALDO-INICIAL " | "
+            WS-LS-VALOR-CUOTA " | "
+            WS-LS-CAPITAL " | "
+            WS-LS-INTERES " | "
+            WS-LS-SALDO-FINAL " |".
+
+3240-MOSTRAR-RESUMEN.
+    COMPUTE WS-COSTO-TOTAL =
+        WS-MONTO-SOLICITADO + WS-TOTAL-INTERESES
+    COMPUTE WS-COSTO-TOTAL ROUNDED = 
+        WS-COSTO-TOTAL * 1000 / 1000
+
+    *> Aplicar redondeo comercial final a los totales
+    MOVE WS-COSTO-TOTAL TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-COSTO-TOTAL
+
+    MOVE WS-TOTAL-INTERESES TO WS-VALOR-REDONDEAR
+    PERFORM 3260-REDONDEAR-VALOR-CMF
+    MOVE WS-VALOR-REDONDEAR TO WS-TOTAL-INTERESES
+
+    *> Preparar línea de resumen unificada
+    MOVE WS-COSTO-TOTAL TO WS-RES-COSTO-TOTAL
+    MOVE WS-TOTAL-INTERESES TO WS-RES-TOTAL-INTERES
+
+    *> ESCRIBIR RESUMEN EN ARCHIVO
+    MOVE " " TO REG-SALIDA
+    WRITE REG-SALIDA
+    MOVE "RESUMEN CREDITO" TO REG-SALIDA
+    WRITE REG-SALIDA
+    MOVE " " TO REG-SALIDA
+    WRITE REG-SALIDA
+
+    MOVE WS-RESUMEN-LINEA TO REG-SALIDA
+    WRITE REG-SALIDA
+
+    *> AGREGAR MÁS LÍNEAS EN BLANCO PARA SEPARACIÓN ENTRE CLIENTES
+    MOVE " " TO REG-SALIDA
+    WRITE REG-SALIDA
+    WRITE REG-SALIDA
+    WRITE REG-SALIDA
+
+    DISPLAY " "
+    DISPLAY "RESUMEN CREDITO"
+    DISPLAY " "
+    DISPLAY WS-RESUMEN-LINEA
+    *> AGREGAR MÁS SEPARACIÓN EN PANTALLA TAMBIÉN
+    DISPLAY " "
+    DISPLAY " "
+    DISPLAY " ".
+
+3250-CALCULAR-FECHA-PAGO.
+    *> Calcular fecha de pago sumando 30 días
+    COMPUTE WS-DIA-ACT = WS-DIA-ACT + 30
+    
+    *> Verificar si el día excede los días del mes actual
+    SET WS-I-MES TO WS-MES-ACT
+    
+    *> Ajustar por año bisiesto en febrero
+    IF WS-MES-ACT = 2
+        IF FUNCTION MOD(WS-ANIO-ACT, 4) = 0 AND
+           (FUNCTION MOD(WS-ANIO-ACT, 100) NOT = 0 OR
+            FUNCTION MOD(WS-ANIO-ACT, 400) = 0)
+            MOVE 29 TO WS-DIAS(2)
+        ELSE
+            MOVE 28 TO WS-DIAS(2)
+        END-IF
+    END-IF
+    
+    IF WS-DIA-ACT > WS-DIAS(WS-I-MES)
+        COMPUTE WS-DIA-ACT = WS-DIA-ACT - WS-DIAS(WS-I-MES)
+        ADD 1 TO WS-MES-ACT
+        IF WS-MES-ACT > 12
+            COMPUTE WS-MES-ACT = WS-MES-ACT - 12
+            ADD 1 TO WS-ANIO-ACT
+        END-IF
+    END-IF
+    
+    *> Mover a fecha de pago
+    MOVE WS-DIA-ACT TO WS-FP-DIA
+    MOVE WS-MES-ACT TO WS-FP-MES
+    MOVE WS-ANIO-ACT TO WS-FP-ANIO.
+
+3260-REDONDEAR-VALOR-CMF.
+    *> Redondeo comercial CMF (>=0.5 suma 1, <0.5 trunca)
+    COMPUTE WS-ENTERO-PART = FUNCTION INTEGER(WS-VALOR-REDONDEAR)
+    COMPUTE WS-DECIMAL-PART = 
+        FUNCTION MOD(WS-VALOR-REDONDEAR * 100, 100)
+    
+    IF WS-DECIMAL-PART >= 50
+        COMPUTE WS-VALOR-REDONDEAR = WS-ENTERO-PART + 1
+    ELSE
+        COMPUTE WS-VALOR-REDONDEAR = WS-ENTERO-PART
+    END-IF.
+
+4000-FINALIZAR.
+    CLOSE DATOS-CLIENTES
+    CLOSE DATOS-CREDITOS
+    CLOSE DATOS-TASA
+    CLOSE SALIDA.
